@@ -1,16 +1,31 @@
 package eu.acme.demo;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+
+import eu.acme.demo.domain.Order;
+import eu.acme.demo.domain.OrderItem;
+import eu.acme.demo.domain.enums.OrderStatus;
+import eu.acme.demo.repository.OrderItemRepository;
+import eu.acme.demo.repository.OrderRepository;
 import eu.acme.demo.web.dto.OrderDto;
+import eu.acme.demo.web.dto.OrderItemDto;
+import eu.acme.demo.web.dto.OrderRequest;
+
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
+import org.springframework.util.Assert;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+import java.math.BigDecimal;
+import java.util.Arrays;
+import java.util.UUID;
 
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -21,42 +36,160 @@ class OrderAPITests {
 
     @Autowired
     private ObjectMapper objectMapper;
+    
+    @Autowired
+    private OrderRepository orderRepository;
+    @Autowired
+    private OrderItemRepository orderItemRepository;
 
     @Test
     void testOrderAPI() throws Exception {
-
-        //TODO: submit order request
-        // 1. create order request
-        // 2. convert to json string using Jackson Object Mapper
-        // 3. set json string to content param
-        MvcResult orderResult = this.mockMvc.perform(post("http://api.okto-demo.eu/orders").
-//                content(orderRequestAsString)
-                contentType("application/json")
+        
+        OrderRequest request = genTestOrderRequest("ORDER-2", "second order");
+    	OrderDto order = request.getOrder();
+                
+        String orderRequestAsString = objectMapper.writeValueAsString(request);
+        MvcResult orderResult = this.mockMvc.perform(post("http://api.okto-demo.eu/orders")
+                .content(orderRequestAsString)
+                .contentType("application/json")
                 .accept("application/json"))
                 .andExpect(status().isOk())
                 .andReturn();
 
-        OrderDto orderDto;
-        // TODO: retrieve order dto from response
-        // convert orderResult.getResponse().getContentAsString() to OrderDto using Jackson Object Mapper
-        // make sure OrderDto contains correct data
-
+        OrderDto returnOrder = objectMapper.readValue(
+        		orderResult.getResponse().getContentAsString(),
+        		OrderDto.class);
+        // Check for same client reference code
+        Assert.isTrue(order.getClientReferenceCode().equals(returnOrder.getClientReferenceCode()), "the client reference code does not match the one submitted: " + returnOrder.getClientReferenceCode());
+        // Check for same items
+        Assert.isTrue(order.getOrderItems().containsAll(returnOrder.getOrderItems()), "The retrieved items do not match those submitted.");
     }
 
-    void testOrderDoubleSubmission() {
-        //TODO: write a test to trigger validation error when submit the same order twice (same client reference code)
+    @Test
+    void testOrderDoubleSubmission() throws Exception{
+        OrderRequest request = genTestOrderRequest("ORDER-3", "third order");
+
+        String orderRequestAsString = objectMapper.writeValueAsString(request);
+        
+        // Send fresh order
+        MvcResult orderResult1 = this.mockMvc.perform(post("http://api.okto-demo.eu/orders")
+                .content(orderRequestAsString)
+                .contentType("application/json")
+                .accept("application/json"))
+                .andExpect(status().isOk())
+                .andReturn();
+
+        // Resend same order
+        MvcResult orderResult2 = this.mockMvc.perform(post("http://api.okto-demo.eu/orders")
+                .content(orderRequestAsString)
+                .contentType("application/json")
+                .accept("application/json"))
+                .andExpect(status().isBadRequest())
+                .andReturn();
+    }
+    
+    @Test
+    void testFetchAllOrders() throws Exception {
+        OrderRequest request = genTestOrderRequest("ORDER-4", "fourth order");
+
+        String orderRequestAsString = objectMapper.writeValueAsString(request);
+        
+        // Send one order so that the return array cannot be empty
+        MvcResult orderResult = this.mockMvc.perform(post("http://api.okto-demo.eu/orders")
+                .content(orderRequestAsString)
+                .contentType("application/json")
+                .accept("application/json"))
+                .andExpect(status().isOk())
+                .andReturn();
+
+    	
+        MvcResult result = this.mockMvc.perform(get("http://api.okto-demo.eu/orders")
+                .accept("application/json"))
+                .andExpect(status().isOk())
+                .andReturn();
+        
+        
+        OrderDto[] allOrders = objectMapper.readValue(
+        		result.getResponse().getContentAsString(),
+        		OrderDto[].class);
+        
+        Assert.isTrue(allOrders.length > 0, "Full order list cannot be empty.");;
     }
 
-    void testFetchAllOrders() {
-        //TODO: create 2 orders (by directly saving to database) and then invoke API call to fetch all orders
-        // check that response contains 2 orders
+    /**
+     * create 1 order (by directly saving to database) and then invoke API call to fetch order
+     * check response contains the correct order
+     * check that when an order not exists, server responds with http 400
+     * @throws Exception 
+     * 
+     */
+    @Test
+    void testFetchCertainOrder() throws Exception {
+        Order o = new Order();
+        o.setStatus(OrderStatus.SUBMITTED);
+        o.setClientReferenceCode("ORDER-5");
+        o.setDescription("fifth order");
+        o.setItemCount(2);
+        o.setItemTotalAmount(BigDecimal.valueOf(100.23));
+        orderRepository.save(o);
+
+        OrderItem item1 = new OrderItem();
+        item1.setOrder(o);
+        item1.setUnitPrice(BigDecimal.valueOf(10));
+        item1.setUnits(10);
+        item1.setTotalPrice(BigDecimal.valueOf(100));
+        
+        OrderItem item2 = new OrderItem();
+        item2.setOrder(o);
+        item2.setUnitPrice(BigDecimal.valueOf(0.23));
+        item2.setUnits(1);
+        item2.setTotalPrice(BigDecimal.valueOf(0.23));
+        
+        orderItemRepository.saveAll(Arrays.asList(item1, item2));
+        orderItemRepository.flush();
+        
+        MvcResult getExistingOrderResult = this.mockMvc.perform(get("http://api.okto-demo.eu/orders/" + o.getId())
+                .accept("application/json"))
+                .andExpect(status().isOk())
+                .andReturn();
+        
+        OrderDto returnedOrder = objectMapper.readValue(
+        		getExistingOrderResult.getResponse().getContentAsString(),
+        		OrderDto.class);
+        
+        Assert.isTrue(returnedOrder != null, "Order not found: " + o.getId());
+        		
+        MvcResult getNotExistingOrderResult = this.mockMvc.perform(get("http://api.okto-demo.eu/orders/" + UUID.randomUUID())
+                .accept("application/json"))
+                .andExpect(status().isBadRequest())
+                .andReturn();
     }
 
-    void testFetchCertainOrder() {
-        //TODO: create 1 order (by directly saving to database) and then invoke API call to fetch order
-        // check response contains the correct order
+    OrderRequest genTestOrderRequest(String clientReferenceCode, String description) {    	
+        OrderItemDto item1 = new OrderItemDto();
+        item1.setUnitPrice(BigDecimal.valueOf(10));
+        item1.setUnits(10);
+        item1.setTotalPrice(BigDecimal.valueOf(100));
+        
+        OrderItemDto item2 = new OrderItemDto();
+        item2.setUnitPrice(BigDecimal.valueOf(0.23));
+        item2.setUnits(1);
+        item2.setTotalPrice(BigDecimal.valueOf(0.23));
+        
+        OrderDto order = new OrderDto();
+        order.setStatus(OrderStatus.SUBMITTED);
+        order.setClientReferenceCode(clientReferenceCode);
+        order.setDescription(description);
+        order.setItemCount(2);
+        order.setTotalAmount(BigDecimal.valueOf(100.23));
+        order.setOrderItems(Arrays.asList(item1, item2));
+    	
+        OrderRequest request = new OrderRequest();
+        
+        request.setOrder(order);
+        request.setClientReferenceCode(order.getClientReferenceCode());
 
-        //TODO: write one more test to check that when an order not exists, server responds with http 400
+        return request;
     }
 }
 

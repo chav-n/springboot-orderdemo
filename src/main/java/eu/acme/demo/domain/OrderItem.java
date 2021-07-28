@@ -51,4 +51,11 @@ public class OrderItem extends AuditableEntity {
     public void setTotalPrice(BigDecimal totalPrice) {
         this.totalPrice = totalPrice;
     }
+
+	@Override
+	public String toString() {
+		return "OrderItem [order=" + order + ", unitPrice=" + unitPrice + ", units=" + units + ", totalPrice="
+				+ totalPrice + ", id=" + id + "]";
+	}
+
 }
