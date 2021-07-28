@@ -16,6 +16,9 @@ import eu.acme.demo.web.dto.OrderRequest;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -28,6 +31,9 @@ public class OrderAPI {
 	@Autowired
 	private final ModelMapper modelMapper;
 	
+    @Autowired
+    private ObjectMapper objectMapper;
+    
 	private final OrderRepository orderRepository;
     private final OrderItemRepository orderItemRepository;
 
@@ -47,7 +53,7 @@ public class OrderAPI {
      */
 	@GetMapping
     public List<OrderLiteDto> fetchOrders() {
-    	return orderRepository.findAll().stream().map(order -> modelMapper.map(order, OrderLiteDto.class)).collect(Collectors.toList());
+    	return orderRepository.findAll().stream().map(order -> generateOrderDtoFromOrder(order)).collect(Collectors.toList());
     }
 
 	/**
@@ -63,7 +69,7 @@ public class OrderAPI {
     public OrderDto fetchOrder(@PathVariable UUID orderId) throws ResourceNotFoundException {
 		Optional<Order> result = orderRepository.findById(orderId);
 		if (result.isPresent()) {
-			return modelMapper.map(result, OrderDto.class);
+			return generateOrderDtoFromOrder(result.get());
 		} else {
 			throw new ResourceNotFoundException("No order found with ID: " + orderId);
 		}
@@ -105,4 +111,15 @@ public class OrderAPI {
     	return orderRequest.getOrder();
     }
 
+    private OrderDto generateOrderDtoFromOrder(Order order) {
+		OrderDto orderDto = modelMapper.map(order, OrderDto.class);
+		orderDto.setOrderItems(orderItemRepository
+				.findAll()
+				.stream()
+				.filter(item -> item.getOrder().getId().equals(order.getId()))
+				.map(item -> modelMapper.map(item, OrderItemDto.class))
+				.collect(Collectors.toList()));
+		
+		return orderDto;
+    }
 }

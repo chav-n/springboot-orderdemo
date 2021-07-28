@@ -63,4 +63,58 @@ public class OrderLiteDto {
     public void setStatus(OrderStatus status) {
         this.status = status;
     }
+    
+    public static OrderLiteDto strictCopy(OrderLiteDto orig) {
+    	OrderLiteDto copy = new OrderLiteDto();
+    	copy.setClientReferenceCode(orig.getClientReferenceCode());
+    	copy.setDescription(orig.getDescription());
+    	copy.setId(orig.getId());
+    	copy.setItemCount(orig.getItemCount());
+    	copy.setStatus(orig.getStatus());
+    	copy.setTotalAmount(orig.getTotalAmount());
+    	
+    	return copy;
+    }
+
+    /**
+     * Test for equality.
+     * 
+     * Compare id fields only if both are not null.
+     * Convert BigDecimal values to values of scale "2".
+     * 
+     */
+	@Override
+	public boolean equals(Object obj) {
+		if (this == obj)
+			return true;
+		if (obj == null)
+			return false;
+		if (getClass() != obj.getClass())
+			return false;
+		OrderLiteDto other = (OrderLiteDto) obj;
+		if (clientReferenceCode == null) {
+			if (other.clientReferenceCode != null)
+				return false;
+		} else if (!clientReferenceCode.equals(other.clientReferenceCode))
+			return false;
+		if (description == null) {
+			if (other.description != null)
+				return false;
+		} else if (!description.equals(other.description))
+			return false;
+		
+		if (id != null && other.id != null && !id.equals(other.id))
+			return false;
+		if (itemCount != other.itemCount)
+			return false;
+		if (status != other.status)
+			return false;
+		if (totalAmount == null) {
+			if (other.totalAmount != null)
+				return false;
+		} else if (!totalAmount.setScale(2).equals(other.totalAmount.setScale(2)))
+			return false;
+		return true;
+	}
+
 }

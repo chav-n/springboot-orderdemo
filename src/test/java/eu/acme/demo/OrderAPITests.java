@@ -12,6 +12,7 @@ import eu.acme.demo.web.dto.OrderItemDto;
 import eu.acme.demo.web.dto.OrderRequest;
 
 import org.junit.jupiter.api.Test;
+import org.modelmapper.ModelMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -38,10 +39,19 @@ class OrderAPITests {
     private ObjectMapper objectMapper;
     
     @Autowired
+    private ModelMapper modelMapper;
+    
+    @Autowired
     private OrderRepository orderRepository;
     @Autowired
     private OrderItemRepository orderItemRepository;
 
+    /**
+     * Check order submission service: Send an order request and compare
+     * stored order against original.
+     * 
+     * @throws Exception
+     */
     @Test
     void testOrderAPI() throws Exception {
         
@@ -59,12 +69,16 @@ class OrderAPITests {
         OrderDto returnOrder = objectMapper.readValue(
         		orderResult.getResponse().getContentAsString(),
         		OrderDto.class);
-        // Check for same client reference code
-        Assert.isTrue(order.getClientReferenceCode().equals(returnOrder.getClientReferenceCode()), "the client reference code does not match the one submitted: " + returnOrder.getClientReferenceCode());
-        // Check for same items
-        Assert.isTrue(order.getOrderItems().containsAll(returnOrder.getOrderItems()), "The retrieved items do not match those submitted.");
+        
+        Assert.isTrue(order.equals(returnOrder), "Order not found: " + objectMapper.writeValueAsString(order));
     }
 
+    /**
+     * Check order submission service: Send same order twice, expect
+     * error on second submission.
+     * 
+     * @throws Exception
+     */
     @Test
     void testOrderDoubleSubmission() throws Exception{
         OrderRequest request = genTestOrderRequest("ORDER-3", "third order");
@@ -113,7 +127,7 @@ class OrderAPITests {
         		result.getResponse().getContentAsString(),
         		OrderDto[].class);
         
-        Assert.isTrue(allOrders.length > 0, "Full order list cannot be empty.");;
+        Assert.isTrue(Arrays.asList(allOrders).contains(request.getOrder()), "Full list of orders does not contain test order: " + objectMapper.writeValueAsString(request.getOrder()));
     }
 
     /**
@@ -131,7 +145,7 @@ class OrderAPITests {
         o.setDescription("fifth order");
         o.setItemCount(2);
         o.setItemTotalAmount(BigDecimal.valueOf(100.23));
-        orderRepository.save(o);
+        orderRepository.saveAndFlush(o);
 
         OrderItem item1 = new OrderItem();
         item1.setOrder(o);
@@ -145,6 +159,8 @@ class OrderAPITests {
         item2.setUnits(1);
         item2.setTotalPrice(BigDecimal.valueOf(0.23));
         
+        
+        
         orderItemRepository.saveAll(Arrays.asList(item1, item2));
         orderItemRepository.flush();
         
@@ -157,7 +173,12 @@ class OrderAPITests {
         		getExistingOrderResult.getResponse().getContentAsString(),
         		OrderDto.class);
         
-        Assert.isTrue(returnedOrder != null, "Order not found: " + o.getId());
+        OrderDto expectedOrder = modelMapper.map(o, OrderDto.class);
+        OrderItemDto itemDto1 = modelMapper.map(item1,  OrderItemDto.class);
+        OrderItemDto itemDto2 = modelMapper.map(item2, OrderItemDto.class);
+        expectedOrder.setOrderItems(Arrays.asList(itemDto1, itemDto2));
+        
+        Assert.isTrue(returnedOrder.equals(expectedOrder), "Order not found: " + objectMapper.writeValueAsString(expectedOrder));
         		
         MvcResult getNotExistingOrderResult = this.mockMvc.perform(get("http://api.okto-demo.eu/orders/" + UUID.randomUUID())
                 .accept("application/json"))

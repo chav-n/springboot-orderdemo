@@ -23,6 +23,10 @@ public class DemoApplication {
 			  mapper.map(src -> src.getTotalAmount(),
 			      Order::setItemTotalAmount);
 			});
+		modelMapper.typeMap(Order.class, OrderDto.class).addMappings(mapper -> {
+			  mapper.map(src -> src.getItemTotalAmount(),
+			      OrderDto::setTotalAmount);
+			});
 		return modelMapper;
 	}
 	

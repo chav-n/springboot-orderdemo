@@ -47,6 +47,13 @@ public class OrderItemDto {
 				+ totalPrice + "]";
 	}
 
+    /**
+     * Test for equality.
+     * 
+     * Compare itemId fields only if both are not null.
+     * Convert BigDecimal values to values of scale "2".
+     * 
+     */
 	@Override
 	public boolean equals(Object obj) {
 		if (this == obj)
@@ -56,20 +63,17 @@ public class OrderItemDto {
 		if (getClass() != obj.getClass())
 			return false;
 		OrderItemDto other = (OrderItemDto) obj;
-		if (itemId == null) {
-			if (other.itemId != null)
-				return false;
-		} else if (!itemId.equals(other.itemId))
+		if (itemId != null && other.itemId != null && !itemId.equals(other.itemId))
 			return false;
 		if (totalPrice == null) {
 			if (other.totalPrice != null)
 				return false;
-		} else if (!totalPrice.equals(other.totalPrice))
+		} else if (!totalPrice.setScale(2).equals(other.totalPrice.setScale(2)))
 			return false;
 		if (unitPrice == null) {
 			if (other.unitPrice != null)
 				return false;
-		} else if (!unitPrice.equals(other.unitPrice))
+		} else if (!unitPrice.setScale(2).equals(other.unitPrice.setScale(2)))
 			return false;
 		if (units != other.units)
 			return false;
